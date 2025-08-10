@@ -60,17 +60,32 @@ echo -e "${BOLD}Extracting and OCR'ing file ${FILE_NUM}${RESET}"
 # Create work directory
 mkdir -p "$WORK_DIR" "$CSV_DIR"
 
-# Step 1: Extract tar file
+# Step 1: Extract tar file and nested tars
 echo -e "${CYAN}Extracting images from tar...${RESET}"
 cd "$WORK_DIR"
 tar -xf "$TAR_FILE"
 
-# Find all PNG images
+# The main tar contains individual tar files for each PDF
+# Extract all the nested tar files to get the PNG images
+echo -e "${CYAN}Extracting nested tar files...${RESET}"
+TAR_FILES=$(find . -name "*.tar" -type f)
+TAR_COUNT=$(echo "$TAR_FILES" | wc -l)
+echo -e "Found ${YELLOW}${TAR_COUNT}${RESET} nested tar files"
+
+for nested_tar in $TAR_FILES; do
+    # Extract each nested tar in place
+    echo "Extracting $(basename "$nested_tar")"
+    tar -xf "$nested_tar" -C "$(dirname "$nested_tar")"
+    # Remove the nested tar file to save space
+    rm -f "$nested_tar"
+done
+
+# Now find all PNG images
 PNG_COUNT=$(find . -name "*.png" -type f | wc -l)
-echo -e "Found ${YELLOW}${PNG_COUNT}${RESET} PNG images"
+echo -e "Found ${YELLOW}${PNG_COUNT}${RESET} PNG images total"
 
 if [ "$PNG_COUNT" -eq 0 ]; then
-    echo -e "${RED}No PNG images found in tar file${RESET}"
+    echo -e "${RED}No PNG images found after extraction${RESET}"
     exit 1
 fi
 
