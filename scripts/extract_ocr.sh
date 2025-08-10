@@ -110,7 +110,7 @@ find . -name "*.png" -type f | sort | while read png_file; do
     echo -e "[${PROCESSED}/${PNG_COUNT}] Processing ${PDF_DIR}/${PAGE_DIR}..."
     
     # Run OCR on this page
-    if bash "$SCRIPT_DIR/ocr_page.sh" "$png_file" "$WORK_DIR" >> "$WORK_DIR/ocr.log" 2>&1; then
+    if bash "$SCRIPT_DIR/fast_ocr.sh" "$png_file" "$WORK_DIR" >> "$WORK_DIR/ocr.log" 2>&1; then
         echo -e "  ${GREEN}✓${RESET} OCR completed"
     else
         echo -e "  ${YELLOW}⚠${RESET} OCR had issues (check log)"
