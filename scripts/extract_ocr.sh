@@ -73,16 +73,16 @@ TAR_COUNT=$(echo "$TAR_FILES" | wc -l)
 echo -e "Found ${YELLOW}${TAR_COUNT}${RESET} nested tar files"
 
 for nested_tar in $TAR_FILES; do
-    # Extract each nested tar in the work directory
-    BASENAME=$(basename "$nested_tar")
-    echo "Extracting $BASENAME"
+    # Extract each nested tar to its own subdirectory to avoid overwrites
+    BASENAME=$(basename "$nested_tar" .tar)
+    EXTRACT_DIR="extracted_$BASENAME"
+    echo "Extracting $BASENAME to $EXTRACT_DIR"
     
-    # Show what's in the tar for debugging
-    TAR_CONTENTS=$(tar -tf "$nested_tar" | head -5)
-    echo "  Sample contents: $(echo $TAR_CONTENTS | tr '\n' ' ')"
+    # Create extraction directory
+    mkdir -p "$EXTRACT_DIR"
     
-    # Extract to current directory to maintain structure
-    tar -xf "$nested_tar"
+    # Extract to the specific directory
+    tar -xf "$nested_tar" -C "$EXTRACT_DIR"
     
     # Remove the nested tar file to save space
     rm -f "$nested_tar"
