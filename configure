@@ -62,12 +62,19 @@ fi
 
 # Check Python packages
 if command_exists "python3"; then
+    MISSING_PY_PACKAGES=()
     for pkg in "${PYTHON_PACKAGES[@]}"; do
         if ! python3 -c "import ${pkg,,}" 2>/dev/null; then
-            echo -e "${YELLOW}⚠ Python package '${pkg}' is missing${RESET}"
-            MISSING_PACKAGES+=("python3-${pkg,,}")
+            MISSING_PY_PACKAGES+=("${pkg,,}")
         fi
     done
+    
+    # If Python packages are missing, show pip install command
+    if [ ${#MISSING_PY_PACKAGES[@]} -gt 0 ]; then
+        echo -e "${YELLOW}⚠ Python packages missing. Install with:${RESET}"
+        echo -e "${BOLD}pip install ${MISSING_PY_PACKAGES[@]}${RESET}"
+        echo ""
+    fi
 fi
 
 # Get unique packages
