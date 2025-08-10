@@ -45,7 +45,9 @@ help:
 	@echo "  make download-all   Download all $(TOTAL_FILES) files (sequential)"
 	@echo "  make download-parallel  Download with parallel jobs (default: 4)"
 	@echo "  make download-parallel JOBS=8  Download with 8 parallel jobs"
-	@echo "  make process-all    Process all downloaded files"
+	@echo "  make process-all    Process all downloaded files (sequential)"
+	@echo "  make process-parallel   Process with parallel jobs (default: 4)"
+	@echo "  make process-parallel JOBS=2  Process 2 files at once (each uses many CPUs)"
 	@echo ""
 	@echo "$(CYAN)Directories:$(RESET)"
 	@echo "  $(DOWNLOAD_DIR)/     Downloaded zip files"
@@ -135,7 +137,7 @@ JOBS ?= 4
 START ?= 1
 END ?= 243
 
-# Process all downloaded files
+# Process all downloaded files (sequential)
 process-all: dirs
 	@echo "$(BOLD)Processing all downloaded files...$(RESET)"
 	@for zip in $(DOWNLOAD_DIR)/*.zip; do \
@@ -144,6 +146,12 @@ process-all: dirs
 			$(MAKE) process-$$FILE_NUM; \
 		fi; \
 	done
+
+# Parallel processing with configurable number of jobs
+process-parallel: dirs
+	@bash $(SCRIPTS_DIR)/parallel_process.sh $(JOBS) $(START) $(END)
+
+# Note: JOBS for process-parallel should be small (1-4) since each job uses many CPU cores
 
 # Calculate total size saved
 stats:
