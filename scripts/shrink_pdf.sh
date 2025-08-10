@@ -11,7 +11,7 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 # Configurable settings
-COLORS=16         # Number of colors for PNG quantization
+# Color quantization removed for better OCR quality
 PARALLEL_JOBS=$(nproc)  # Use all available CPUs by default
 
 # Check dependencies
@@ -34,7 +34,6 @@ show_help() {
     echo "Usage: $0 [OPTIONS] input.pdf"
     echo ""
     echo "Options:"
-    echo "  -c, --colors COLORS   Number of colors for PNG (default: 16)"
     echo "  -j, --jobs JOBS       Number of parallel jobs (default: all CPUs)"
     echo "  -h, --help            Show this help message"
     exit 0
@@ -44,10 +43,6 @@ show_help() {
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -c|--colors)
-                COLORS="$2"
-                shift 2
-                ;;
             -j|--jobs)
                 PARALLEL_JOBS="$2"
                 shift 2
@@ -71,7 +66,6 @@ parse_args() {
 process_page() {
     local page_file="$1"
     local output_dir="$2"
-    local colors="$3"
     local page_num=$(basename "$page_file" | sed 's/page-\([0-9]*\).pdf/\1/')
     local page_dir="$output_dir/page-$page_num"
     
@@ -189,7 +183,7 @@ main() {
     
     ORIGINAL_SIZE_HUMAN=$(numfmt --to=iec-i --suffix=B $ORIGINAL_SIZE)
 
-    echo -e "Settings: COLORS=${CYAN}$COLORS${RESET}, PARALLEL_JOBS=${CYAN}$PARALLEL_JOBS${RESET}"
+    echo -e "Settings: PARALLEL_JOBS=${CYAN}$PARALLEL_JOBS${RESET}"
     echo -e "File: ${BOLD}$BASE_NAME${RESET} (${MAGENTA}$ORIGINAL_SIZE_HUMAN${RESET})"
     echo -e " - Extracting to \"$TEMP_DIR\""
 
@@ -229,12 +223,12 @@ main() {
         # GNU parallel
         find "$TEMP_DIR/pages" -name "page-*.pdf" | \
         parallel -j "$PARALLEL_JOBS" --halt now,fail=1 \
-            "process_page {} $TEMP_DIR $COLORS || echo 'Failed to process: {}' >> $ERROR_LOG"
+            "process_page {} $TEMP_DIR || echo 'Failed to process: {}' >> $ERROR_LOG"
     else
         # Fallback to xargs for parallel processing
         find "$TEMP_DIR/pages" -name "page-*.pdf" | \
         xargs -P "$PARALLEL_JOBS" -I {} bash -c \
-            "process_page '{}' '$TEMP_DIR' '$COLORS' || echo 'Failed to process: {}' >> '$ERROR_LOG'"
+            "process_page '{}' '$TEMP_DIR' || echo 'Failed to process: {}' >> '$ERROR_LOG'"
     fi
     
     # Check if any errors occurred
@@ -255,7 +249,7 @@ main() {
         exit 1
     fi
     
-    echo -e " - Successfully processed ${YELLOW}$IMAGE_COUNT${RESET} images with ${CYAN}$COLORS${RESET} colors"
+    echo -e " - Successfully processed ${YELLOW}$IMAGE_COUNT${RESET} images"
 
     # Calculate new size - using -bs to get a single summarized value
     NEW_SIZE=$(du -bs "$TEMP_DIR" 2>/dev/null | cut -f1)
