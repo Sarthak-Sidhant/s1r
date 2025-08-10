@@ -281,7 +281,7 @@ def process_page(image_path, output_csv):
             'father': parsed.get('father', ''),
             'age': parsed.get('age', ''),
             'address': parsed.get('address', ''),
-            'raw_text': text,
+            'raw_text': text,  # DictWriter handles newlines properly
             'valid': is_valid
         }
         

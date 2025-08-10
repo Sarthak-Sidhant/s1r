@@ -89,38 +89,64 @@ if [ "$PNG_COUNT" -eq 0 ]; then
     exit 1
 fi
 
-# Step 2: Process each image with OCR using Python
-echo -e "${CYAN}Running OCR on images with Python...${RESET}"
+# Step 2: Process images with OCR using page-level parallelism
+echo -e "${CYAN}Running OCR on images with optimized parallelism...${RESET}"
 
-PROCESSED=0
-FAILED=0
-PAGE_CSVS=()
+# Set thread limits to prevent oversubscription
+export OMP_THREAD_LIMIT=1
+export OMP_NUM_THREADS=1
+export TESSERACT_NUM_THREADS=1
 
-find . -name "*.png" -type f | sort | while read png_file; do
-    # Create a unique page name from the full path
-    # e.g., ./tars/2025-EROLLGEN-S04-1-SIR-DraftRoll-Revision1-HIN-100-WI/page-1/img-000.png
-    PDF_DIR=$(echo "$png_file" | cut -d'/' -f3)  # Get the PDF directory name
-    PAGE_DIR=$(echo "$png_file" | cut -d'/' -f4)  # Get page-N
-    IMG_NAME=$(basename "$png_file" .png)        # Get img-000
+# Determine number of parallel jobs (use 4 or half the CPU count, whichever is smaller)
+PARALLEL_JOBS=$(nproc)
+if [ "$PARALLEL_JOBS" -gt 8 ]; then
+    PARALLEL_JOBS=4
+elif [ "$PARALLEL_JOBS" -gt 4 ]; then
+    PARALLEL_JOBS=$((PARALLEL_JOBS / 2))
+fi
+
+echo -e "Using ${YELLOW}${PARALLEL_JOBS}${RESET} parallel OCR workers"
+
+# Use the fast OCR script if available, otherwise fall back to the original
+OCR_SCRIPT="$SCRIPT_DIR/ocr_page_fast.py"
+if [ ! -f "$OCR_SCRIPT" ]; then
+    OCR_SCRIPT="$SCRIPT_DIR/ocr_page_python.py"
+    echo -e "${YELLOW}Note: Using fallback OCR script (install tesserocr for better performance)${RESET}"
+fi
+
+# Process pages in parallel using GNU parallel or xargs
+if command -v parallel &>/dev/null && parallel --version 2>/dev/null | grep -q GNU; then
+    # Use GNU parallel with progress bar
+    find . -name "*.png" -type f | sort | \
+    parallel -j "$PARALLEL_JOBS" --bar --halt now,fail=1 \
+        "PDF_DIR=\$(echo {} | cut -d'/' -f3); \
+         PAGE_DIR=\$(echo {} | cut -d'/' -f4); \
+         IMG_NAME=\$(basename {} .png); \
+         PAGE_PATH=\"\${PDF_DIR}_\${PAGE_DIR}_\${IMG_NAME}\"; \
+         PAGE_CSV=\"$WORK_DIR/\${PAGE_PATH}.csv\"; \
+         python3 \"$OCR_SCRIPT\" {} \"\$PAGE_CSV\" >> \"$WORK_DIR/ocr.log\" 2>&1 && \
+         echo \"\$PAGE_CSV\" >> \"$WORK_DIR/page_csvs.txt\" && \
+         rm -f {} && \
+         echo -e \"  ${GREEN}✓${RESET} \${PDF_DIR}/\${PAGE_DIR}\""
+else
+    # Fallback to xargs for parallel processing
+    echo -e "${YELLOW}Using xargs for parallel processing (install GNU parallel for progress bar)${RESET}"
     
-    PAGE_PATH="${PDF_DIR}_${PAGE_DIR}_${IMG_NAME}"
-    PAGE_CSV="$WORK_DIR/${PAGE_PATH}.csv"
-    
-    PROCESSED=$((PROCESSED + 1))
-    echo -e "[${PROCESSED}/${PNG_COUNT}] Processing ${PDF_DIR}/${PAGE_DIR}..."
-    
-    # Run Python OCR on this page
-    if python3 "$SCRIPT_DIR/ocr_page_python.py" "$png_file" "$PAGE_CSV" >> "$WORK_DIR/ocr.log" 2>&1; then
-        echo -e "  ${GREEN}✓${RESET} OCR completed"
-        echo "$PAGE_CSV" >> "$WORK_DIR/page_csvs.txt"
-    else
-        echo -e "  ${YELLOW}⚠${RESET} OCR had issues (check log)"
-        FAILED=$((FAILED + 1))
-    fi
-    
-    # Clean up the original PNG to save space
-    rm -f "$png_file"
-done
+    find . -name "*.png" -type f | sort | \
+    xargs -P "$PARALLEL_JOBS" -I {} bash -c \
+        "PDF_DIR=\$(echo {} | cut -d'/' -f3); \
+         PAGE_DIR=\$(echo {} | cut -d'/' -f4); \
+         IMG_NAME=\$(basename {} .png); \
+         PAGE_PATH=\"\${PDF_DIR}_\${PAGE_DIR}_\${IMG_NAME}\"; \
+         PAGE_CSV=\"$WORK_DIR/\${PAGE_PATH}.csv\"; \
+         echo \"Processing \${PDF_DIR}/\${PAGE_DIR}...\"; \
+         python3 \"$OCR_SCRIPT\" {} \"\$PAGE_CSV\" >> \"$WORK_DIR/ocr.log\" 2>&1 && \
+         echo \"\$PAGE_CSV\" >> \"$WORK_DIR/page_csvs.txt\" && \
+         rm -f {} && \
+         echo -e \"  ${GREEN}✓${RESET} \${PDF_DIR}/\${PAGE_DIR}\""
+fi
+
+PROCESSED=$(find . -name "*.csv" -type f | wc -l)
 
 echo -e "${GREEN}OCR complete: ${PROCESSED} pages processed${RESET}"
 
