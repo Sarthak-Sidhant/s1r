@@ -73,14 +73,26 @@ TAR_COUNT=$(echo "$TAR_FILES" | wc -l)
 echo -e "Found ${YELLOW}${TAR_COUNT}${RESET} nested tar files"
 
 for nested_tar in $TAR_FILES; do
-    # Extract each nested tar in place
-    echo "Extracting $(basename "$nested_tar")"
-    tar -xf "$nested_tar" -C "$(dirname "$nested_tar")"
+    # Extract each nested tar in the work directory
+    BASENAME=$(basename "$nested_tar")
+    echo "Extracting $BASENAME"
+    
+    # Show what's in the tar for debugging
+    TAR_CONTENTS=$(tar -tf "$nested_tar" | head -5)
+    echo "  Sample contents: $(echo $TAR_CONTENTS | tr '\n' ' ')"
+    
+    # Extract to current directory to maintain structure
+    tar -xf "$nested_tar"
+    
     # Remove the nested tar file to save space
     rm -f "$nested_tar"
 done
 
-# Now find all PNG images
+# Now find all PNG images - show the directory structure for debugging
+echo -e "${CYAN}Checking extracted structure...${RESET}"
+DIRS_WITH_PNG=$(find . -name "*.png" -type f | head -20 | xargs -I {} dirname {} | sort -u)
+echo "Sample directories with PNGs: $DIRS_WITH_PNG"
+
 PNG_COUNT=$(find . -name "*.png" -type f | wc -l)
 echo -e "Found ${YELLOW}${PNG_COUNT}${RESET} PNG images total"
 
