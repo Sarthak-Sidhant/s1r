@@ -92,15 +92,17 @@ fi
 # Step 2: Process each image with OCR
 echo -e "${CYAN}Running OCR on images...${RESET}"
 
+# Process images in batches to avoid overwhelming the system
 PROCESSED=0
 FAILED=0
 
-# Process images in batches to avoid overwhelming the system
 find . -name "*.png" -type f | sort | while read png_file; do
-    PAGE_NAME=$(basename "$png_file" .png)
+    # Create a unique page name from the full path
+    # e.g., ./tars/PDF-name/page-1/img-000.png -> PDF-name_page-1_img-000
+    PAGE_PATH=$(echo "$png_file" | sed 's|^\./||' | tr '/' '_' | sed 's|\.png$||')
     
     PROCESSED=$((PROCESSED + 1))
-    echo -e "[${PROCESSED}/${PNG_COUNT}] Processing ${PAGE_NAME}..."
+    echo -e "[${PROCESSED}/${PNG_COUNT}] Processing ${PAGE_PATH}..."
     
     # Run OCR on this page
     if bash "$SCRIPT_DIR/ocr_page.sh" "$png_file" "$WORK_DIR" >> "$WORK_DIR/ocr.log" 2>&1; then
