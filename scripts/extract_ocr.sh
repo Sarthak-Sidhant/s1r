@@ -106,7 +106,6 @@ echo -e "${CYAN}Running OCR on images with optimized parallelism...${RESET}"
 
 # Set thread limits to prevent oversubscription
 export OMP_THREAD_LIMIT=1
-export OMP_NUM_THREADS=1
 export TESSERACT_NUM_THREADS=1
 
 # Use all available CPU cores
