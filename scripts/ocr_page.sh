@@ -41,6 +41,15 @@ GAP_Y=5     # Vertical gap between boxes
 
 VALID_RECORDS=0
 TOTAL_RECORDS=$((GRID_COLS * GRID_ROWS))
+WORK_DIR="$OUTPUT_DIR/work"
+mkdir -p "$WORK_DIR"
+
+# Initialize batch file lists
+> "$WORK_DIR/serial_files.txt"
+> "$WORK_DIR/epic_files.txt" 
+> "$WORK_DIR/text_files.txt"
+
+echo -e "${CYAN}Step 1: Extracting all regions...${RESET}"
 
 for row in $(seq 0 $((GRID_ROWS - 1))); do
     for col in $(seq 0 $((GRID_COLS - 1))); do
@@ -68,47 +77,65 @@ for row in $(seq 0 $((GRID_ROWS - 1))); do
         convert "$BOXES_DIR/record_${RECORD_ID}.png" -crop "220x90+0+25" \
                 "$BOXES_DIR/record_${RECORD_ID}_text.png" 2>/dev/null
         
-        # OCR each region
-        
-        # Serial (digits only)
-        tesseract "$BOXES_DIR/record_${RECORD_ID}_serial.png" \
-                  "$OCR_DIR/record_${RECORD_ID}_serial" \
-                  -l eng --oem 1 --psm 8 \
-                  -c tessedit_char_whitelist=0123456789 \
-                  quiet 2>/dev/null || echo "FAILED" > "$OCR_DIR/record_${RECORD_ID}_serial.txt"
-        
-        # EPIC (alphanumeric)
-        tesseract "$BOXES_DIR/record_${RECORD_ID}_epic.png" \
-                  "$OCR_DIR/record_${RECORD_ID}_epic" \
-                  -l eng --oem 1 --psm 8 \
-                  -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 \
-                  quiet 2>/dev/null || echo "FAILED" > "$OCR_DIR/record_${RECORD_ID}_epic.txt"
-        
-        # Hindi text (preprocess for better results)
-        PROCESSED_TEXT="$BOXES_DIR/record_${RECORD_ID}_text_processed.png"
-        convert "$BOXES_DIR/record_${RECORD_ID}_text.png" \
-                -colorspace gray -normalize -threshold 70% \
-                "$PROCESSED_TEXT" 2>/dev/null
-        
-        tesseract "$PROCESSED_TEXT" \
-                  "$OCR_DIR/record_${RECORD_ID}_text" \
-                  -l hin+eng --oem 1 --psm 6 \
-                  quiet 2>/dev/null || echo "FAILED" > "$OCR_DIR/record_${RECORD_ID}_text.txt"
-        
-        rm -f "$PROCESSED_TEXT"
-        
-        # Validation
-        SERIAL=$(cat "$OCR_DIR/record_${RECORD_ID}_serial.txt" 2>/dev/null | tr -d '\n\r' || echo "")
-        EPIC=$(cat "$OCR_DIR/record_${RECORD_ID}_epic.txt" 2>/dev/null | tr -d '\n\r' || echo "")
-        TEXT=$(cat "$OCR_DIR/record_${RECORD_ID}_text.txt" 2>/dev/null || echo "")
-        
-        if [[ ${#SERIAL} -ge 1 && ${#EPIC} -ge 6 && ${#TEXT} -ge 20 ]]; then
-            echo "VALID" > "$OCR_DIR/record_${RECORD_ID}.status"
-            VALID_RECORDS=$((VALID_RECORDS + 1))
-        else
-            echo "INSUFFICIENT_DATA" > "$OCR_DIR/record_${RECORD_ID}.status"
-        fi
+        # Store region files for batch OCR later
+        echo "$BOXES_DIR/record_${RECORD_ID}_serial.png" >> "$WORK_DIR/serial_files.txt"
+        echo "$BOXES_DIR/record_${RECORD_ID}_epic.png" >> "$WORK_DIR/epic_files.txt" 
+        echo "$BOXES_DIR/record_${RECORD_ID}_text.png" >> "$WORK_DIR/text_files.txt"
     done
+done
+
+echo -e "${CYAN}Step 2: Running batch OCR...${RESET}"
+
+# Batch OCR processing - much faster than individual calls
+echo "Processing serial numbers..."
+cat "$WORK_DIR/serial_files.txt" | while read img_file; do
+    record_id=$(basename "$img_file" _serial.png | sed 's/^record_//')
+    tesseract "$img_file" "$OCR_DIR/record_${record_id}_serial" \
+        -l eng --oem 1 --psm 8 \
+        -c tessedit_char_whitelist=0123456789 \
+        quiet 2>/dev/null || echo "FAILED" > "$OCR_DIR/record_${record_id}_serial.txt"
+done &
+
+echo "Processing EPIC IDs..."
+cat "$WORK_DIR/epic_files.txt" | while read img_file; do
+    record_id=$(basename "$img_file" _epic.png | sed 's/^record_//')
+    tesseract "$img_file" "$OCR_DIR/record_${record_id}_epic" \
+        -l eng --oem 1 --psm 8 \
+        -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 \
+        quiet 2>/dev/null || echo "FAILED" > "$OCR_DIR/record_${record_id}_epic.txt"
+done &
+
+echo "Processing Hindi text..."
+cat "$WORK_DIR/text_files.txt" | while read img_file; do
+    record_id=$(basename "$img_file" _text.png | sed 's/^record_//')
+    # Preprocess for better Hindi OCR
+    processed_img="${img_file%.png}_processed.png"
+    convert "$img_file" -colorspace gray -normalize -threshold 70% "$processed_img" 2>/dev/null
+    tesseract "$processed_img" "$OCR_DIR/record_${record_id}_text" \
+        -l hin+eng --oem 1 --psm 6 \
+        quiet 2>/dev/null || echo "FAILED" > "$OCR_DIR/record_${record_id}_text.txt"
+    rm -f "$processed_img"
+done &
+
+# Wait for all background jobs to complete
+wait
+
+echo -e "${CYAN}Step 3: Validating results...${RESET}"
+
+# Now validate all records
+for record_num in $(seq 0 $((TOTAL_RECORDS - 1))); do
+    RECORD_ID=$(printf "%02d" $record_num)
+    
+    SERIAL=$(cat "$OCR_DIR/record_${RECORD_ID}_serial.txt" 2>/dev/null | tr -d '\n\r' || echo "")
+    EPIC=$(cat "$OCR_DIR/record_${RECORD_ID}_epic.txt" 2>/dev/null | tr -d '\n\r' || echo "")
+    TEXT=$(cat "$OCR_DIR/record_${RECORD_ID}_text.txt" 2>/dev/null || echo "")
+    
+    if [[ ${#SERIAL} -ge 1 && ${#EPIC} -ge 6 && ${#TEXT} -ge 20 ]]; then
+        echo "VALID" > "$OCR_DIR/record_${RECORD_ID}.status"
+        VALID_RECORDS=$((VALID_RECORDS + 1))
+    else
+        echo "INSUFFICIENT_DATA" > "$OCR_DIR/record_${RECORD_ID}.status"
+    fi
 done
 
 # Summary
