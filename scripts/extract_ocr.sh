@@ -98,11 +98,16 @@ FAILED=0
 
 find . -name "*.png" -type f | sort | while read png_file; do
     # Create a unique page name from the full path
-    # e.g., ./tars/PDF-name/page-1/img-000.png -> PDF-name_page-1_img-000
-    PAGE_PATH=$(echo "$png_file" | sed 's|^\./||' | tr '/' '_' | sed 's|\.png$||')
+    # e.g., ./tars/2025-EROLLGEN-S04-1-SIR-DraftRoll-Revision1-HIN-100-WI/page-1/img-000.png
+    # Extract the PDF name and page info properly
+    PDF_DIR=$(echo "$png_file" | cut -d'/' -f3)  # Get the PDF directory name
+    PAGE_DIR=$(echo "$png_file" | cut -d'/' -f4)  # Get page-N
+    IMG_NAME=$(basename "$png_file" .png)        # Get img-000
+    
+    PAGE_PATH="${PDF_DIR}_${PAGE_DIR}_${IMG_NAME}"
     
     PROCESSED=$((PROCESSED + 1))
-    echo -e "[${PROCESSED}/${PNG_COUNT}] Processing ${PAGE_PATH}..."
+    echo -e "[${PROCESSED}/${PNG_COUNT}] Processing ${PDF_DIR}/${PAGE_DIR}..."
     
     # Run OCR on this page
     if bash "$SCRIPT_DIR/ocr_page.sh" "$png_file" "$WORK_DIR" >> "$WORK_DIR/ocr.log" 2>&1; then

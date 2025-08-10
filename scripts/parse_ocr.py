@@ -121,9 +121,66 @@ class VoterParser:
         
         return record
     
+    def parse_record(self, record_id: str, ocr_dir: str) -> Optional[Dict]:
+        """Parse a structured voter record from separate OCR files."""
+        base_path = os.path.join(ocr_dir, record_id)
+        
+        # Read separate OCR results
+        try:
+            with open(f"{base_path}_serial.txt", "r", encoding="utf-8", errors="ignore") as f:
+                serial_text = f.read().strip()
+        except:
+            serial_text = ""
+            
+        try:
+            with open(f"{base_path}_epic.txt", "r", encoding="utf-8", errors="ignore") as f:
+                epic_text = f.read().strip()
+        except:
+            epic_text = ""
+            
+        try:
+            with open(f"{base_path}_text.txt", "r", encoding="utf-8", errors="ignore") as f:
+                hindi_text = f.read()
+        except:
+            hindi_text = ""
+        
+        # Extract fields
+        record = {
+            "record_id": record_id,
+            "serial": self.extract_field(r"\b([0-9]{1,4})\b", serial_text),
+            "epic": self.extract_field(r"\b([A-Z0-9]{6,12})\b", epic_text),
+            "name": self.extract_field(self.PATTERNS["name"], hindi_text),
+            "relation": self.extract_field(self.PATTERNS["relation"], hindi_text),
+            "house_no": self.extract_field(self.PATTERNS["house_no"], hindi_text),
+            "age": self.extract_field(self.PATTERNS["age"], hindi_text),
+            "gender": self.extract_field(self.PATTERNS["gender"], hindi_text),
+            "raw_text_length": len(hindi_text),
+        }
+        
+        # Validation - require name, age, serial
+        required_fields = ["name", "age", "serial"]
+        missing = [field for field in required_fields if not record.get(field)]
+        
+        if missing:
+            print(f"  Record {record_id}: Missing fields: {missing}")
+            return None
+        
+        # Age validation
+        if record.get("age"):
+            try:
+                age = int(record["age"])
+                if age < 18 or age > 120:
+                    print(f"  Record {record_id}: Invalid age: {age}")
+                    return None
+            except ValueError:
+                print(f"  Record {record_id}: Non-numeric age: {record['age']}")
+                return None
+        
+        return record
+    
     def process_page(self, ocr_dir: str, page_id: str) -> List[Dict]:
         """
-        Process all tiles from a page.
+        Process all records from a page.
         
         Args:
             ocr_dir: Directory containing OCR text files
@@ -133,36 +190,31 @@ class VoterParser:
             List of valid voter records
         """
         records = []
-        ocr_files = sorted(glob.glob(os.path.join(ocr_dir, "tile_*.txt")))
         
-        print(f"Processing page {page_id}: {len(ocr_files)} tiles")
+        # Find all record status files
+        status_files = sorted(glob.glob(os.path.join(ocr_dir, "record_*.status")))
         
-        for ocr_file in ocr_files:
+        print(f"Processing page {page_id}: {len(status_files)} records")
+        
+        for status_file in status_files:
             self.stats["total_tiles"] += 1
             
-            # Check tile status
-            status_file = ocr_file.replace(".txt", ".status")
-            if os.path.exists(status_file):
+            # Get record ID
+            record_id = os.path.basename(status_file).replace(".status", "")
+            
+            # Check if record was marked as valid
+            try:
                 with open(status_file, "r") as f:
                     status = f.read().strip()
-                if status != "VALID":
-                    self.stats["skipped_tiles"] += 1
-                    continue
+            except:
+                status = "UNKNOWN"
             
-            # Read OCR text
-            try:
-                with open(ocr_file, "r", encoding="utf-8", errors="ignore") as f:
-                    ocr_text = f.read()
-            except Exception as e:
-                print(f"  Error reading {ocr_file}: {e}")
-                self.stats["invalid_records"] += 1
+            if status != "VALID":
+                self.stats["skipped_tiles"] += 1
                 continue
             
-            # Parse the tile
-            tile_name = os.path.basename(ocr_file).replace(".txt", "")
-            tile_id = f"{page_id}_{tile_name}"
-            
-            record = self.parse_tile(ocr_text, tile_id)
+            # Parse the record
+            record = self.parse_record(record_id, ocr_dir)
             
             if record:
                 record["page_id"] = page_id
@@ -205,7 +257,7 @@ class VoterParser:
         
         # Write to CSV
         if all_records:
-            fieldnames = ["page_id", "tile_id", "serial", "epic", "name", 
+            fieldnames = ["page_id", "record_id", "serial", "epic", "name", 
                          "relation", "house_no", "age", "gender", "raw_text_length"]
             
             with open(output_csv, "w", newline="", encoding="utf-8") as f:
