@@ -28,14 +28,16 @@ mkdir -p "$BOXES_DIR" "$OCR_DIR"
 
 echo -e "${CYAN}Processing ${IMAGE_NAME} with fixed coordinates...${RESET}"
 
-# Fixed layout for Indian voter register - based on standard form
-# 30 records in 10 rows x 3 columns, each ~315x134 pixels
+# Fixed layout for Indian voter register - based on precise measurements
+# 30 records in 10 rows x 3 columns
 GRID_COLS=3
 GRID_ROWS=10
-RECORD_WIDTH=315
-RECORD_HEIGHT=134
-START_X=17
-START_Y=55
+RECORD_WIDTH=298
+RECORD_HEIGHT=121
+START_X=22  # Horizontal page margin
+START_Y=42  # Vertical page margin
+GAP_X=5     # Horizontal gap between boxes
+GAP_Y=5     # Vertical gap between boxes
 
 VALID_RECORDS=0
 TOTAL_RECORDS=$((GRID_COLS * GRID_ROWS))
@@ -45,25 +47,25 @@ for row in $(seq 0 $((GRID_ROWS - 1))); do
         RECORD_NUM=$((row * GRID_COLS + col))
         RECORD_ID=$(printf "%02d" $RECORD_NUM)
         
-        # Calculate position
-        X=$((START_X + col * RECORD_WIDTH))
-        Y=$((START_Y + row * RECORD_HEIGHT))
+        # Calculate position with gaps
+        X=$((START_X + col * (RECORD_WIDTH + GAP_X)))
+        Y=$((START_Y + row * (RECORD_HEIGHT + GAP_Y)))
         
         # Extract the full record box
         convert "$INPUT_IMAGE" -crop "${RECORD_WIDTH}x${RECORD_HEIGHT}+${X}+${Y}" \
                 "$BOXES_DIR/record_${RECORD_ID}.png" 2>/dev/null
         
-        # Extract specific regions:
-        # Serial number: top-left (50x25 pixels)
-        convert "$BOXES_DIR/record_${RECORD_ID}.png" -crop "50x25+8+8" \
+        # Extract specific regions based on precise measurements:
+        # Serial number: first 150 pixels of top 25 pixel strip
+        convert "$BOXES_DIR/record_${RECORD_ID}.png" -crop "150x25+0+0" \
                 "$BOXES_DIR/record_${RECORD_ID}_serial.png" 2>/dev/null
         
-        # EPIC ID: top-right (100x25 pixels)  
-        convert "$BOXES_DIR/record_${RECORD_ID}.png" -crop "100x25+200+8" \
+        # EPIC ID: from pixel 200 onwards of top 25 pixel strip (98 pixels wide)
+        convert "$BOXES_DIR/record_${RECORD_ID}.png" -crop "98x25+200+0" \
                 "$BOXES_DIR/record_${RECORD_ID}_epic.png" 2>/dev/null
         
-        # Main text: center-left (180x90 pixels, avoiding photo)
-        convert "$BOXES_DIR/record_${RECORD_ID}.png" -crop "180x90+8+35" \
+        # Hindi text: underneath, 220 pixels wide and 90 pixels tall
+        convert "$BOXES_DIR/record_${RECORD_ID}.png" -crop "220x90+0+25" \
                 "$BOXES_DIR/record_${RECORD_ID}_text.png" 2>/dev/null
         
         # OCR each region
