@@ -3,3 +3,5 @@
 *.zip
 *.log
 *.txt
+*.tmp
+data/locks

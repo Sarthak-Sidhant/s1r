@@ -37,7 +37,9 @@ help:
 	@echo "  make help          Show this help message"
 	@echo ""
 	@echo "$(CYAN)Batch operations:$(RESET)"
-	@echo "  make download-all   Download all $(TOTAL_FILES) files"
+	@echo "  make download-all   Download all $(TOTAL_FILES) files (sequential)"
+	@echo "  make download-parallel  Download with parallel jobs (default: 4)"
+	@echo "  make download-parallel JOBS=8  Download with 8 parallel jobs"
 	@echo "  make process-all    Process all downloaded files"
 	@echo ""
 	@echo "$(CYAN)Directories:$(RESET)"
@@ -118,6 +120,15 @@ download-all: dirs
 	@for i in $$(seq 1 $(TOTAL_FILES)); do \
 		$(MAKE) download-$$i; \
 	done
+
+# Parallel download with configurable number of jobs
+download-parallel: dirs
+	@bash $(SCRIPTS_DIR)/parallel_download.sh $(JOBS) $(START) $(END)
+
+# Default parallel download values
+JOBS ?= 4
+START ?= 1
+END ?= 243
 
 # Process all downloaded files
 process-all: dirs
