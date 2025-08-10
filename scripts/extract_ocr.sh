@@ -104,12 +104,12 @@ fi
 # Step 2: Process images with OCR using page-level parallelism
 echo -e "${CYAN}Running OCR on images with optimized parallelism...${RESET}"
 
-# Set thread limits to prevent oversubscription
-export OMP_THREAD_LIMIT=1
-export TESSERACT_NUM_THREADS=1
-
 # Use all available CPU cores
 PARALLEL_JOBS=$(nproc)
+
+# Set thread limits to prevent oversubscription (after getting CPU count)
+export OMP_THREAD_LIMIT=1
+export TESSERACT_NUM_THREADS=1
 
 echo -e "Using ${YELLOW}${PARALLEL_JOBS}${RESET} parallel OCR workers"
 
