@@ -38,6 +38,9 @@ declare -A DEPS=(
     ["bc"]="bc"
 )
 
+# Python packages required
+PYTHON_PACKAGES=("pillow")
+
 # Optional OCR packages (shown as additional install)
 OCR_PACKAGES="tesseract-ocr-hin"
 
@@ -48,6 +51,24 @@ for cmd in "${!DEPS[@]}"; do
         MISSING_PACKAGES+=("${DEPS[$cmd]}")
     fi
 done
+
+# Check for Hindi language pack in tesseract
+if command_exists "tesseract"; then
+    if ! tesseract --list-langs 2>/dev/null | grep -q "^hin$"; then
+        echo -e "${YELLOW}⚠ Tesseract is installed but Hindi language pack is missing${RESET}"
+        MISSING_PACKAGES+=("tesseract-ocr-hin")
+    fi
+fi
+
+# Check Python packages
+if command_exists "python3"; then
+    for pkg in "${PYTHON_PACKAGES[@]}"; do
+        if ! python3 -c "import ${pkg,,}" 2>/dev/null; then
+            echo -e "${YELLOW}⚠ Python package '${pkg}' is missing${RESET}"
+            MISSING_PACKAGES+=("python3-${pkg,,}")
+        fi
+    done
+fi
 
 # Get unique packages
 UNIQUE_PACKAGES=($(printf "%s\n" "${MISSING_PACKAGES[@]}" | sort -u))
@@ -76,7 +97,6 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]] || [[ "$OS_FAMILY" == *"de
     for pkg in "${UNIQUE_PACKAGES[@]}"; do
         echo -n " $pkg"
     done
-    echo -n " $OCR_PACKAGES"
     echo ""
     
 elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "fedora" ]] || [[ "$OS_FAMILY" == *"rhel"* ]]; then
