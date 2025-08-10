@@ -109,13 +109,8 @@ export OMP_THREAD_LIMIT=1
 export OMP_NUM_THREADS=1
 export TESSERACT_NUM_THREADS=1
 
-# Determine number of parallel jobs (use 4 or half the CPU count, whichever is smaller)
+# Use all available CPU cores
 PARALLEL_JOBS=$(nproc)
-if [ "$PARALLEL_JOBS" -gt 8 ]; then
-    PARALLEL_JOBS=4
-elif [ "$PARALLEL_JOBS" -gt 4 ]; then
-    PARALLEL_JOBS=$((PARALLEL_JOBS / 2))
-fi
 
 echo -e "Using ${YELLOW}${PARALLEL_JOBS}${RESET} parallel OCR workers"
 
