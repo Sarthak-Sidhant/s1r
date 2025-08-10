@@ -16,7 +16,7 @@ PARALLEL_JOBS=$(nproc)  # Use all available CPUs by default
 
 # Check dependencies
 check_dependencies() {
-    for cmd in pdfseparate tar file numfmt du pdftocairo pdfimages convert pngquant; do
+    for cmd in pdfseparate tar file numfmt du pdftocairo pdfimages convert; do
         if ! command -v $cmd &> /dev/null; then
             echo -e "${RED}Error: $cmd is not installed. Please install it first.${RESET}"
             exit 1
@@ -121,18 +121,10 @@ process_page() {
             cp "$img" "$temp_png"
         fi
         
-        # Reduce colors using pngquant with maximum compression
-        # --force overwrites existing file, --speed 1 = slowest/best compression
-        pngquant --force --speed 1 --quality=60-90 "$colors" "$temp_png" --output "$final_png" 2>/dev/null || {
-            echo "Error reducing colors: $temp_png" >&2
-            rm -f "$temp_png"
-            return 1
-        }
+        # Skip pngquant color reduction to preserve OCR quality
+        final_png="$temp_png"
         
-        # Further optimize with optipng if available (silent fail if not)
-        if command -v optipng &> /dev/null; then
-            optipng -o7 -quiet "$final_png" 2>/dev/null || true
-        fi
+        # Skip optipng optimization to preserve OCR quality
         
         # Remove original and temp files
         if [ "$img" != "$final_png" ]; then

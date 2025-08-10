@@ -95,41 +95,50 @@ class FastOCR:
             self.text_api = None
     
     def ocr_serial(self, image):
-        """OCR a serial number region."""
+        """OCR a serial number region. Returns (text, confidence)."""
         if HAS_TESSEROCR:
             self.serial_api.SetImage(image)
-            return self.serial_api.GetUTF8Text().strip()
+            text = self.serial_api.GetUTF8Text().strip()
+            confidence = self.serial_api.MeanTextConf()
+            return text, confidence
         else:
-            # Fallback to pytesseract
-            return pytesseract.image_to_string(
+            # Fallback to pytesseract - no confidence available
+            text = pytesseract.image_to_string(
                 image,
                 lang='eng',
                 config='--psm 7 -c tessedit_char_whitelist=0123456789'
             ).strip()
+            return text, -1
     
     def ocr_epic(self, image):
-        """OCR an EPIC ID region."""
+        """OCR an EPIC ID region. Returns (text, confidence)."""
         if HAS_TESSEROCR:
             self.epic_api.SetImage(image)
-            return self.epic_api.GetUTF8Text().strip()
+            text = self.epic_api.GetUTF8Text().strip()
+            confidence = self.epic_api.MeanTextConf()
+            return text, confidence
         else:
-            return pytesseract.image_to_string(
+            text = pytesseract.image_to_string(
                 image,
                 lang='eng',
                 config='--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
             ).strip()
+            return text, -1
     
     def ocr_text(self, image):
-        """OCR Hindi/English text region."""
+        """OCR Hindi/English text region. Returns (text, confidence)."""
         if HAS_TESSEROCR:
             self.text_api.SetImage(image)
-            return self.text_api.GetUTF8Text().strip()
+            text = self.text_api.GetUTF8Text().strip()
+            confidence = self.text_api.MeanTextConf()
+            return text, confidence
         else:
-            return pytesseract.image_to_string(
+            text = pytesseract.image_to_string(
                 image,
                 lang='hin+eng',
                 config='--psm 6'
             ).strip()
+            return text, -1
     
     def __del__(self):
         """Clean up API instances."""
@@ -203,21 +212,22 @@ def process_page(image_path, output_csv, debug=False):
                     # Serial number region
                     serial_box = (0, 0, 150, 25)
                     serial_img = record_img.crop(serial_box)
-                    serial = ocr_engine.ocr_serial(serial_img)
+                    serial, serial_conf = ocr_engine.ocr_serial(serial_img)
                     
                     # EPIC ID region
                     epic_box = (200, 0, 298, 25)
                     epic_img = record_img.crop(epic_box)
-                    epic = ocr_engine.ocr_epic(epic_img)
+                    epic, epic_conf = ocr_engine.ocr_epic(epic_img)
                     
                     # Text region
                     text_box = (0, 25, 220, 115)
                     text_img = record_img.crop(text_box)
-                    text = ocr_engine.ocr_text(text_img)
+                    text, text_conf = ocr_engine.ocr_text(text_img)
                     
                 except Exception as e:
                     print(f"Error processing record {record_id}: {e}")
                     serial = epic = text = ""
+                    serial_conf = epic_conf = text_conf = -1
                 
                 # Parse Hindi text
                 parsed = parse_hindi_text(text)
@@ -227,18 +237,34 @@ def process_page(image_path, output_csv, debug=False):
                 if is_valid:
                     valid_count += 1
                 
+                # Extract PDF name from path (e.g., ./extracted_PDF-NAME/page-1/img-000.png)
+                pdf_name = ""
+                original_pdf = ""
+                path_parts = Path(image_path).parts
+                for part in path_parts:
+                    if part.startswith('extracted_'):
+                        pdf_name = part[10:]  # Remove 'extracted_' prefix
+                        # Extract original PDF name by removing .tar suffix if present
+                        original_pdf = pdf_name.replace('.tar', '') if pdf_name.endswith('.tar') else pdf_name
+                        break
+                
                 csv_record = {
+                    'original_pdf': original_pdf,
+                    'pdf': pdf_name,
                     'page': Path(image_path).stem,
                     'record_id': record_id,
                     'row': row,
                     'col': col,
                     'serial': serial,
+                    'serial_conf': serial_conf,
                     'epic': epic,
+                    'epic_conf': epic_conf,
                     'name': parsed.get('name', ''),
                     'father': parsed.get('father', ''),
                     'age': parsed.get('age', ''),
                     'address': parsed.get('address', ''),
-                    'raw_text': text,  # DictWriter handles newlines properly
+                    'raw_text': text,
+                    'text_conf': text_conf,
                     'valid': is_valid
                 }
                 
