@@ -89,29 +89,30 @@ if [ "$PNG_COUNT" -eq 0 ]; then
     exit 1
 fi
 
-# Step 2: Process each image with OCR
-echo -e "${CYAN}Running OCR on images...${RESET}"
+# Step 2: Process each image with OCR using Python
+echo -e "${CYAN}Running OCR on images with Python...${RESET}"
 
-# Process images in batches to avoid overwhelming the system
 PROCESSED=0
 FAILED=0
+PAGE_CSVS=()
 
 find . -name "*.png" -type f | sort | while read png_file; do
     # Create a unique page name from the full path
     # e.g., ./tars/2025-EROLLGEN-S04-1-SIR-DraftRoll-Revision1-HIN-100-WI/page-1/img-000.png
-    # Extract the PDF name and page info properly
     PDF_DIR=$(echo "$png_file" | cut -d'/' -f3)  # Get the PDF directory name
     PAGE_DIR=$(echo "$png_file" | cut -d'/' -f4)  # Get page-N
     IMG_NAME=$(basename "$png_file" .png)        # Get img-000
     
     PAGE_PATH="${PDF_DIR}_${PAGE_DIR}_${IMG_NAME}"
+    PAGE_CSV="$WORK_DIR/${PAGE_PATH}.csv"
     
     PROCESSED=$((PROCESSED + 1))
     echo -e "[${PROCESSED}/${PNG_COUNT}] Processing ${PDF_DIR}/${PAGE_DIR}..."
     
-    # Run OCR on this page
-    if bash "$SCRIPT_DIR/fast_ocr.sh" "$png_file" "$WORK_DIR" >> "$WORK_DIR/ocr.log" 2>&1; then
+    # Run Python OCR on this page
+    if python3 "$SCRIPT_DIR/ocr_page_python.py" "$png_file" "$PAGE_CSV" >> "$WORK_DIR/ocr.log" 2>&1; then
         echo -e "  ${GREEN}✓${RESET} OCR completed"
+        echo "$PAGE_CSV" >> "$WORK_DIR/page_csvs.txt"
     else
         echo -e "  ${YELLOW}⚠${RESET} OCR had issues (check log)"
         FAILED=$((FAILED + 1))
@@ -123,10 +124,36 @@ done
 
 echo -e "${GREEN}OCR complete: ${PROCESSED} pages processed${RESET}"
 
-# Step 3: Parse OCR results into CSV
-echo -e "${CYAN}Parsing OCR results to CSV...${RESET}"
+# Step 3: Combine all page CSVs into final CSV
+echo -e "${CYAN}Combining page CSVs into final output...${RESET}"
 
-python3 "$SCRIPT_DIR/parse_ocr.py" "$WORK_DIR" "$OUTPUT_CSV"
+if [ -f "$WORK_DIR/page_csvs.txt" ]; then
+    # Get the first CSV to extract headers
+    FIRST_CSV=$(head -n1 "$WORK_DIR/page_csvs.txt")
+    if [ -f "$FIRST_CSV" ]; then
+        # Copy header from first CSV
+        head -n1 "$FIRST_CSV" > "$OUTPUT_CSV"
+        
+        # Append data from all CSVs (skip headers)
+        while read csv_file; do
+            if [ -f "$csv_file" ]; then
+                tail -n+2 "$csv_file" >> "$OUTPUT_CSV"
+            fi
+        done < "$WORK_DIR/page_csvs.txt"
+        
+        # Clean up individual page CSVs
+        while read csv_file; do
+            rm -f "$csv_file"
+        done < "$WORK_DIR/page_csvs.txt"
+        rm -f "$WORK_DIR/page_csvs.txt"
+    else
+        echo -e "${RED}No valid CSV files found${RESET}"
+        exit 1
+    fi
+else
+    echo -e "${RED}No pages were processed successfully${RESET}"
+    exit 1
+fi
 
 # Check if CSV was created
 if [ -f "$OUTPUT_CSV" ]; then
