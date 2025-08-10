@@ -1,0 +1,169 @@
+#!/bin/bash
+
+# Configuration checker for voter register processing pipeline
+# Checks all required dependencies and reports what needs to be installed
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+echo -e "${BOLD}Voter Register Processing Pipeline - Configuration Check${RESET}"
+echo "========================================================="
+echo ""
+
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" &> /dev/null
+}
+
+# Track missing dependencies
+MISSING_DEPS=()
+MISSING_PACKAGES=()
+
+# Function to check a dependency
+check_dep() {
+    local cmd="$1"
+    local package="$2"
+    local required="${3:-required}"
+    
+    if command_exists "$cmd"; then
+        echo -e "  ${GREEN}✓${RESET} $cmd"
+        return 0
+    else
+        if [ "$required" = "required" ]; then
+            echo -e "  ${RED}✗${RESET} $cmd ${RED}(REQUIRED)${RESET}"
+            MISSING_DEPS+=("$cmd")
+            MISSING_PACKAGES+=("$package")
+        else
+            echo -e "  ${YELLOW}○${RESET} $cmd (optional)"
+        fi
+        return 1
+    fi
+}
+
+# Check core utilities
+echo -e "${CYAN}Core Utilities:${RESET}"
+check_dep "curl" "curl"
+check_dep "wget" "wget"
+check_dep "unzip" "unzip"
+check_dep "tar" "tar"
+check_dep "file" "file"
+check_dep "numfmt" "coreutils"
+check_dep "nproc" "coreutils"
+echo ""
+
+# Check PDF processing tools
+echo -e "${CYAN}PDF Processing Tools:${RESET}"
+check_dep "pdfseparate" "poppler-utils"
+check_dep "pdfinfo" "poppler-utils"
+check_dep "pdfimages" "poppler-utils"
+check_dep "pdftocairo" "poppler-utils"
+echo ""
+
+# Check image processing tools
+echo -e "${CYAN}Image Processing Tools:${RESET}"
+check_dep "convert" "imagemagick"
+check_dep "pngquant" "pngquant"
+check_dep "optipng" "optipng"  # Required for best compression
+echo ""
+
+# Check parallel processing
+echo -e "${CYAN}Parallel Processing:${RESET}"
+check_dep "parallel" "parallel"
+echo ""
+
+# Check shell requirements
+echo -e "${CYAN}Shell Requirements:${RESET}"
+if [ -n "$BASH_VERSION" ]; then
+    echo -e "  ${GREEN}✓${RESET} bash ($BASH_VERSION)"
+else
+    echo -e "  ${RED}✗${RESET} bash ${RED}(REQUIRED)${RESET}"
+    MISSING_DEPS+=("bash")
+fi
+echo ""
+
+# Detect OS for installation instructions
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+    OS_FAMILY=$ID_LIKE
+else
+    OS="unknown"
+fi
+
+# Summary and installation instructions
+echo "========================================================="
+if [ ${#MISSING_DEPS[@]} -eq 0 ]; then
+    echo -e "${BOLD}${GREEN}✓ All dependencies are installed!${RESET}"
+    echo ""
+    echo -e "The system is ready. You can now run:"
+    echo -e "  ${CYAN}make test${RESET}              - Test with file 1"
+    echo -e "  ${CYAN}make download-parallel${RESET}  - Download files in parallel"
+    echo -e "  ${CYAN}make process-all${RESET}        - Process all downloaded files"
+    echo ""
+    echo -e "For optimal performance with parallel downloads:"
+    echo -e "  ${CYAN}make download-parallel JOBS=4${RESET}"
+else
+    echo -e "${BOLD}${RED}✗ Missing ${#MISSING_DEPS[@]} required dependencies${RESET}"
+    echo ""
+    echo -e "${YELLOW}Missing commands:${RESET}"
+    for dep in "${MISSING_DEPS[@]}"; do
+        echo -e "  - $dep"
+    done
+    echo ""
+    
+    # Provide OS-specific installation commands
+    echo -e "${YELLOW}Installation instructions:${RESET}"
+    
+    # Get unique package list
+    UNIQUE_PACKAGES=($(printf "%s\n" "${MISSING_PACKAGES[@]}" | sort -u))
+    
+    if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]] || [[ "$OS_FAMILY" == *"debian"* ]]; then
+        echo -e "${CYAN}For Ubuntu/Debian:${RESET}"
+        echo "  sudo apt-get update"
+        echo -n "  sudo apt-get install -y"
+        for pkg in "${UNIQUE_PACKAGES[@]}"; do
+            echo -n " $pkg"
+        done
+        echo ""
+        
+    elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "fedora" ]] || [[ "$OS_FAMILY" == *"rhel"* ]]; then
+        echo -e "${CYAN}For CentOS/RHEL/Fedora:${RESET}"
+        echo "  sudo yum install -y epel-release  # or: sudo dnf install -y epel-release"
+        echo -n "  sudo yum install -y"
+        for pkg in "${UNIQUE_PACKAGES[@]}"; do
+            # Translate package names for RHEL-based systems
+            if [ "$pkg" = "imagemagick" ]; then
+                echo -n " ImageMagick"
+            else
+                echo -n " $pkg"
+            fi
+        done
+        echo ""
+        
+    elif [[ "$OS" == "arch" ]] || [[ "$OS_FAMILY" == *"arch"* ]]; then
+        echo -e "${CYAN}For Arch Linux:${RESET}"
+        echo -n "  sudo pacman -S"
+        for pkg in "${UNIQUE_PACKAGES[@]}"; do
+            echo -n " $pkg"
+        done
+        echo ""
+        
+    else
+        echo -e "${CYAN}Generic installation:${RESET}"
+        echo "  Please install the following packages using your package manager:"
+        for pkg in "${UNIQUE_PACKAGES[@]}"; do
+            echo "    - $pkg"
+        done
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}After installing dependencies, run ./configure again to verify.${RESET}"
+    exit 1
+fi

@@ -23,11 +23,16 @@ RESET := \033[0m
 # Default target
 all: help
 
+# Check dependencies
+deps:
+	@./configure
+
 # Help message
 help:
 	@echo "$(BOLD)Voter Register PDF Processing Pipeline$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Usage:$(RESET)"
+	@echo "  make deps          Check dependencies (run this first!)"
 	@echo "  make download-N     Download file N.zip (e.g., make download-1)"
 	@echo "  make process-N      Process file N.zip to N.tar (e.g., make process-1)"
 	@echo "  make test          Test with file 1.zip"
