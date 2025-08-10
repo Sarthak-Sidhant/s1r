@@ -38,8 +38,12 @@ declare -A DEPS=(
     ["bc"]="bc"
 )
 
-# Python packages required
-PYTHON_PACKAGES=("pillow")
+# Python packages required (package_name:import_name)
+declare -A PYTHON_PACKAGES=(
+    ["pillow"]="PIL"
+    ["numpy"]="numpy"
+    ["tesserocr"]="tesserocr"
+)
 
 # Optional OCR packages (shown as additional install)
 OCR_PACKAGES="tesseract-ocr-hin"
@@ -63,16 +67,17 @@ fi
 # Check Python packages
 if command_exists "python3"; then
     MISSING_PY_PACKAGES=()
-    for pkg in "${PYTHON_PACKAGES[@]}"; do
-        if ! python3 -c "import ${pkg,,}" 2>/dev/null; then
-            MISSING_PY_PACKAGES+=("${pkg,,}")
+    for pkg_name in "${!PYTHON_PACKAGES[@]}"; do
+        import_name="${PYTHON_PACKAGES[$pkg_name]}"
+        if ! python3 -c "import ${import_name}" 2>/dev/null; then
+            MISSING_PY_PACKAGES+=("${pkg_name}")
         fi
     done
     
     # If Python packages are missing, show pip install command
     if [ ${#MISSING_PY_PACKAGES[@]} -gt 0 ]; then
         echo -e "${YELLOW}⚠ Python packages missing. Install with:${RESET}"
-        echo -e "${BOLD}pip install ${MISSING_PY_PACKAGES[@]}${RESET}"
+        echo -e "${BOLD}pip3 install ${MISSING_PY_PACKAGES[@]}${RESET}"
         echo ""
     fi
 fi

@@ -40,8 +40,46 @@ class FastOCR:
         if HAS_TESSEROCR:
             # Initialize three API instances for different region types
             # This avoids constantly switching configs
-            # Find tessdata path
-            tessdata_path = '/usr/share/tesseract-ocr/5/tessdata/'
+            # Find tessdata path dynamically
+            import subprocess
+            import os
+            
+            # Try to find tessdata path from tesseract
+            tessdata_path = None
+            try:
+                result = subprocess.run(['tesseract', '--list-langs'], 
+                                      capture_output=True, text=True, stderr=subprocess.STDOUT)
+                output = result.stdout
+                if 'tessdata' in output:
+                    # Extract path from output like "List of available languages in "/path/to/tessdata/"
+                    import re
+                    match = re.search(r'"([^"]*tessdata[^"]*)"', output)
+                    if match:
+                        tessdata_path = match.group(1)
+                        if not tessdata_path.endswith('/'):
+                            tessdata_path += '/'
+            except:
+                pass
+            
+            # Fallback to common locations
+            if not tessdata_path or not os.path.exists(tessdata_path):
+                possible_paths = [
+                    '/usr/share/tesseract-ocr/5/tessdata/',
+                    '/usr/share/tesseract-ocr/4.00/tessdata/',
+                    '/usr/share/tesseract-ocr/tessdata/',
+                    '/usr/share/tessdata/',
+                    '/usr/local/share/tessdata/',
+                    os.path.expanduser('~/.local/share/tessdata/'),
+                ]
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        tessdata_path = path
+                        break
+            
+            if not tessdata_path:
+                raise RuntimeError("Could not find tessdata directory. Please install tesseract-ocr.")
+            
+            print(f"Using tessdata path: {tessdata_path}", file=sys.stderr)
             
             self.serial_api = tesserocr.PyTessBaseAPI(path=tessdata_path, lang='eng', psm=tesserocr.PSM.SINGLE_LINE)
             self.serial_api.SetVariable("tessedit_char_whitelist", "0123456789")
