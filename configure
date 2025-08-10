@@ -33,7 +33,13 @@ declare -A DEPS=(
     ["pngquant"]="pngquant"
     ["optipng"]="optipng"
     ["parallel"]="parallel"
+    ["tesseract"]="tesseract-ocr"
+    ["python3"]="python3"
+    ["bc"]="bc"
 )
+
+# Optional OCR packages (shown as additional install)
+OCR_PACKAGES="tesseract-ocr-hin"
 
 # Check what's missing
 MISSING_PACKAGES=()
@@ -70,6 +76,7 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]] || [[ "$OS_FAMILY" == *"de
     for pkg in "${UNIQUE_PACKAGES[@]}"; do
         echo -n " $pkg"
     done
+    echo -n " $OCR_PACKAGES"
     echo ""
     
 elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "fedora" ]] || [[ "$OS_FAMILY" == *"rhel"* ]]; then
