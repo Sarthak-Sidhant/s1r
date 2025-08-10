@@ -49,6 +49,7 @@ help:
 	@echo "  make process-parallel   Process with parallel jobs (default: 4)"
 	@echo "  make process-parallel JOBS=2  Process 2 files at once (each uses many CPUs)"
 	@echo "  make ocr-N          Extract OCR from N.tar to CSV (e.g., make ocr-1)"
+	@echo "  make ocr-all        Run OCR on all completed files (sequential)"
 	@echo ""
 	@echo "$(CYAN)Directories:$(RESET)"
 	@echo "  $(DOWNLOAD_DIR)/     Downloaded zip files"
@@ -145,6 +146,17 @@ ocr-%: dirs
 	@FILE_NUM=$*; \
 	echo "$(CYAN)Running OCR extraction on $$FILE_NUM.tar...$(RESET)"; \
 	bash $(SCRIPTS_DIR)/extract_ocr.sh $$FILE_NUM
+
+# OCR all processed files (sequential)
+ocr-all: dirs
+	@echo "$(BOLD)Running OCR on all completed files...$(RESET)"
+	@for tar in $(COMPLETED_DIR)/*.tar; do \
+		if [ -f "$$tar" ]; then \
+			FILE_NUM=$$(basename $$tar .tar); \
+			echo "$(CYAN)Processing OCR for file $$FILE_NUM...$(RESET)"; \
+			$(MAKE) ocr-$$FILE_NUM; \
+		fi; \
+	done
 
 # Process all downloaded files (sequential)
 process-all: dirs
