@@ -56,11 +56,17 @@ cleanup() {
     if [ $exit_code -ne 0 ]; then
         echo -e "${RED}Process failed for file ${FILE_NUM}${RESET}" | tee -a "$LOG_FILE"
         update_lock "failed"
-    fi
-    # Clean up work directory if it exists
-    if [ -d "$WORK_DIR" ] && [ "$exit_code" -eq 0 ]; then
-        echo -e "${CYAN}Cleaning up work directory...${RESET}" | tee -a "$LOG_FILE"
-        rm -rf "$WORK_DIR"
+        # Clean up work directory on failure too
+        if [ -d "$WORK_DIR" ]; then
+            echo -e "${CYAN}Cleaning up work directory after failure...${RESET}" | tee -a "$LOG_FILE"
+            rm -rf "$WORK_DIR"
+        fi
+    else
+        # Clean up work directory on success
+        if [ -d "$WORK_DIR" ]; then
+            echo -e "${CYAN}Cleaning up work directory...${RESET}" | tee -a "$LOG_FILE"
+            rm -rf "$WORK_DIR"
+        fi
     fi
 }
 trap cleanup EXIT
@@ -74,9 +80,16 @@ if [ -f "$LOCK_FILE" ]; then
     elif [ "$STATUS" = "failed" ]; then
         echo -e "${YELLOW}Previous processing failed for ${FILE_NUM}, retrying...${RESET}"
         rm -rf "$WORK_DIR"
+        rm -f "$LOCK_FILE"  # Remove failed lock so we can retry
     else
-        echo -e "${YELLOW}File ${FILE_NUM} is currently being processed (status: $STATUS)${RESET}"
-        exit 0
+        # Check if work directory exists - if not, the process died
+        if [ ! -d "$WORK_DIR" ]; then
+            echo -e "${YELLOW}Previous processing of ${FILE_NUM} was interrupted, retrying...${RESET}"
+            rm -f "$LOCK_FILE"  # Remove stale lock
+        else
+            echo -e "${YELLOW}File ${FILE_NUM} is currently being processed (status: $STATUS)${RESET}"
+            exit 0
+        fi
     fi
 fi
 
@@ -189,9 +202,13 @@ TOTAL_RATIO=$((100 - (FINAL_SIZE_BYTES * 100 / ZIP_SIZE_BYTES)))
 # Step 4: Mark as complete
 update_lock "done"
 
+# Step 5: Delete the original zip file to save space
+echo -e "${CYAN}Removing original zip file to save space...${RESET}" | tee -a "$LOG_FILE"
+rm -f "$ZIP_FILE"
+
 # Print summary
 echo -e "${BOLD}${GREEN}✓ Successfully processed ${FILE_NUM}.zip${RESET}" | tee -a "$LOG_FILE"
-echo -e "Input:  ${MAGENTA}${ZIP_SIZE}${RESET}" | tee -a "$LOG_FILE"
+echo -e "Input:  ${MAGENTA}${ZIP_SIZE}${RESET} (deleted)" | tee -a "$LOG_FILE"
 echo -e "Output: ${MAGENTA}${FINAL_SIZE}${RESET}" | tee -a "$LOG_FILE"
 echo -e "Compression: ${GREEN}${TOTAL_RATIO}%${RESET}" | tee -a "$LOG_FILE"
 echo -e "Location: ${CYAN}${FINAL_TAR}${RESET}" | tee -a "$LOG_FILE"

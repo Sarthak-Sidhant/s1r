@@ -16,12 +16,17 @@ PARALLEL_JOBS=$(nproc)  # Use all available CPUs by default
 
 # Check dependencies
 check_dependencies() {
-    for cmd in pdfseparate parallel tar file numfmt du pdftocairo pdfimages convert pngquant; do
+    for cmd in pdfseparate tar file numfmt du pdftocairo pdfimages convert pngquant; do
         if ! command -v $cmd &> /dev/null; then
             echo -e "${RED}Error: $cmd is not installed. Please install it first.${RESET}"
             exit 1
         fi
     done
+    # Check for parallel or xargs (we can use either)
+    if ! command -v parallel &> /dev/null && ! command -v xargs &> /dev/null; then
+        echo -e "${RED}Error: neither parallel nor xargs is installed. Please install one.${RESET}"
+        exit 1
+    fi
 }
 
 # Help message
@@ -227,9 +232,18 @@ main() {
     touch "$ERROR_LOG"
     
     # Process pages and check for errors
-    find "$TEMP_DIR/pages" -name "page-*.pdf" | \
-    parallel -j "$PARALLEL_JOBS" --halt now,fail=1 \
-        "process_page {} $TEMP_DIR $COLORS || echo 'Failed to process: {}' >> $ERROR_LOG"
+    # Check if we have GNU parallel or busybox parallel
+    if parallel --version 2>/dev/null | grep -q GNU; then
+        # GNU parallel
+        find "$TEMP_DIR/pages" -name "page-*.pdf" | \
+        parallel -j "$PARALLEL_JOBS" --halt now,fail=1 \
+            "process_page {} $TEMP_DIR $COLORS || echo 'Failed to process: {}' >> $ERROR_LOG"
+    else
+        # Fallback to xargs for parallel processing
+        find "$TEMP_DIR/pages" -name "page-*.pdf" | \
+        xargs -P "$PARALLEL_JOBS" -I {} bash -c \
+            "process_page '{}' '$TEMP_DIR' '$COLORS' || echo 'Failed to process: {}' >> '$ERROR_LOG'"
+    fi
     
     # Check if any errors occurred
     if [ -s "$ERROR_LOG" ]; then
